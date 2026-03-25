@@ -1,0 +1,48 @@
+name: projeto-de-teste
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: code-backend
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - 8081:8080
+    volumes:
+      - ./CoreBackend/src:/app/CoreBackend/src
+      - ./CoreBackend/Properties:/app/CoreBackend/Properties
+      - ./CoreBackend/appsettings.Development.json:/app/CoreBackend/appsettings.Development.json
+      - ./CoreBackend/appsettings.json:/app/CoreBackend/appsettings.json
+      - ./CoreBackend/CoreBackend.csproj:/app/CoreBackend/CoreBackend.csproj
+      - ./CoreBackend/CoreBackend.sln:/app/CoreBackend/CoreBackend.sln
+      - ./CoreBackend/Program.cs:/app/CoreBackend/Program.cs
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 1G
+    depends_on:
+      - db
+
+  db:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    ports:
+      - 33060:3306
+    deploy:
+      resources:
+        limits:
+          cpus: 2
+          memory: 1G
+    # volumes:
+    #   - db_data:/var/lib/mysql
+
+# volumes:
+#   db_data:
+
