@@ -7,7 +7,6 @@ using CoreBackend.Users;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using MySqlConnector;
 using Resend;
 
 namespace CoreBackend.Extensions;
@@ -39,19 +38,10 @@ public static class ServiceCollectionExtensions
                 throw new InvalidOperationException("ConnectionStrings:DefaultConnection deve ser configurado.");
             }
 
-            return LooksLikeSqlite(connectionString)
-                ? new SqliteConnection(connectionString)
-                : new MySqlConnection(connectionString);
+            return new SqliteConnection(connectionString);
         });
 
         return services;
-    }
-
-    private static bool LooksLikeSqlite(string connectionString)
-    {
-        var normalized = connectionString.TrimStart();
-        return normalized.StartsWith("Data Source=", StringComparison.OrdinalIgnoreCase) ||
-               normalized.StartsWith("Filename=", StringComparison.OrdinalIgnoreCase);
     }
 
     public static IServiceCollection AddCoreInfrastructure(this IServiceCollection services, IConfiguration configuration)
@@ -75,4 +65,3 @@ public static class ServiceCollectionExtensions
         return services;
     }
 }
-

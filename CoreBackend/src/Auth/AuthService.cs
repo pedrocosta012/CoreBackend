@@ -50,28 +50,6 @@ internal sealed class AuthService
             return Results.BadRequest(new { error = "Password is required." });
         }
 
-        // var duplicate = await _db.QuerySingleOrDefaultAsync<string>(
-        //     IsSqlite()
-        //         ? """
-        //           SELECT id
-        //           FROM user
-        //           WHERE deletedAt IS NULL
-        //           AND (username = @Username OR email = @Email)
-        //           LIMIT 1
-        //           """
-        //         : """
-        //           SELECT CAST(id AS CHAR) AS id
-        //           FROM user
-        //           WHERE deletedAt IS NULL
-        //           AND (username = @Username OR email = @Email)
-        //           LIMIT 1
-        //           """,
-        //     new { request.Username, request.Email });
-
-        // if (!string.IsNullOrWhiteSpace(duplicate))
-        // {
-        //     return Results.Conflict(new { error = "Email or username already exists." });
-        // }
         try
         {
             var userId = Guid.NewGuid().ToString();
@@ -93,41 +71,10 @@ internal sealed class AuthService
             var response = await CreateTokensAsync(new AuthenticatedUser(userId, request.Username, request.Email));
             return Results.Created($"/users/{userId}", response);
         }
-        catch (MySqlConnector.MySqlException err)
+        catch (SqliteException err) when (
+            err.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase))
         {
-            if (err.Message.Contains("Duplicate entry"))
-            {
-                var duplicateKeys = new List<string>();
-                var matches = System.Text.RegularExpressions.Regex.Matches(
-                    err.Message,
-                    @"key '([^']+)'");
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var fullKey = matches[i].Groups[1].Value;
-                    if (string.IsNullOrWhiteSpace(fullKey))
-                    {
-                        continue;
-                    }
-
-                    var parts = fullKey.Split('.');
-                    duplicateKeys.Add(
-                        parts.Length > 1
-                            ? string.Join('.', parts, 1, parts.Length - 1)
-                            : fullKey);
-                }
-
-                System.Console.WriteLine(
-                    duplicateKeys.Count > 0
-                        ? $"Chaves duplicadas: {string.Join(", ", duplicateKeys)}"
-                        : err.Message);
-            }
-            else
-            {
-                System.Console.WriteLine(err.Message);
-            }
-
-            throw;
+            return Results.Conflict(new { error = "Email or username already exists." });
         }
     }
 
@@ -139,21 +86,13 @@ internal sealed class AuthService
         }
 
         var user = await _db.QuerySingleOrDefaultAsync<LoginUserRow>(
-            IsSqlite()
-                ? """
-                  SELECT id AS id, username, COALESCE(email, '') AS email, password
-                  FROM user
-                  WHERE deletedAt IS NULL
-                  AND (email = @Identifier OR username = @Identifier)
-                  LIMIT 1
-                  """
-                : """
-                  SELECT CAST(id AS CHAR) AS id, username, COALESCE(email, '') AS email, password
-                  FROM user
-                  WHERE deletedAt IS NULL
-                  AND (email = @Identifier OR username = @Identifier)
-                  LIMIT 1
-                  """,
+            """
+            SELECT id, username, COALESCE(email, '') AS email, password
+            FROM user
+            WHERE deletedAt IS NULL
+            AND (email = @Identifier OR username = @Identifier)
+            LIMIT 1
+            """,
             new { request.Identifier });
 
         if (user is null || !_passwordHasher.Verify(request.Password, user.Password))
@@ -173,31 +112,18 @@ internal sealed class AuthService
         }
 
         var tokenRow = await _db.QuerySingleOrDefaultAsync<RefreshTokenRow>(
-            IsSqlite()
-                ? """
-                  SELECT rt.id AS id,
-                         rt.userId AS userId,
-                         rt.expiresAt,
-                         rt.revokedAt,
-                         u.username,
-                         COALESCE(u.email, '') AS email
-                  FROM refresh_token rt
-                  INNER JOIN user u ON u.id = rt.userId
-                  WHERE rt.token = @Token AND u.deletedAt IS NULL
-                  LIMIT 1
-                  """
-                : """
-                  SELECT CAST(rt.id AS CHAR) AS id,
-                         CAST(rt.userId AS CHAR) AS userId,
-                         rt.expiresAt,
-                         rt.revokedAt,
-                         u.username,
-                         COALESCE(u.email, '') AS email
-                  FROM refresh_token rt
-                  INNER JOIN user u ON u.id = rt.userId
-                  WHERE rt.token = @Token AND u.deletedAt IS NULL
-                  LIMIT 1
-                  """,
+            """
+            SELECT rt.id,
+                   rt.userId,
+                   rt.expiresAt,
+                   rt.revokedAt,
+                   u.username,
+                   COALESCE(u.email, '') AS email
+            FROM refresh_token rt
+            INNER JOIN user u ON u.id = rt.userId
+            WHERE rt.token = @Token AND u.deletedAt IS NULL
+            LIMIT 1
+            """,
             new { Token = request.RefreshToken });
 
         if (tokenRow is null)
@@ -214,9 +140,7 @@ internal sealed class AuthService
         }
 
         await _db.ExecuteAsync(
-            IsSqlite()
-                ? "UPDATE refresh_token SET revokedAt = CURRENT_TIMESTAMP WHERE id = @Id"
-                : "UPDATE refresh_token SET revokedAt = UTC_TIMESTAMP() WHERE id = @Id",
+            "UPDATE refresh_token SET revokedAt = CURRENT_TIMESTAMP WHERE id = @Id",
             new { tokenRow.Id });
 
         var response = await CreateTokensAsync(new AuthenticatedUser(tokenRow.UserId, tokenRow.Username, tokenRow.Email));
@@ -231,19 +155,12 @@ internal sealed class AuthService
         }
 
         var user = await _db.QuerySingleOrDefaultAsync<LoginUserRow>(
-            IsSqlite()
-                ? """
-                  SELECT id AS id, username, COALESCE(email, '') AS email, password
-                  FROM user
-                  WHERE email = @Email AND deletedAt IS NULL
-                  LIMIT 1
-                  """
-                : """
-                  SELECT CAST(id AS CHAR) AS id, username, COALESCE(email, '') AS email, password
-                  FROM user
-                  WHERE email = @Email AND deletedAt IS NULL
-                  LIMIT 1
-                  """,
+            """
+            SELECT id, username, COALESCE(email, '') AS email, password
+            FROM user
+            WHERE email = @Email AND deletedAt IS NULL
+            LIMIT 1
+            """,
             new { request.Email });
 
         if (user is not null)
@@ -277,25 +194,15 @@ internal sealed class AuthService
         }
 
         var resetRow = await _db.QuerySingleOrDefaultAsync<PasswordResetTokenRow>(
-            IsSqlite()
-                ? """
-                  SELECT id AS id,
-                         userId AS userId,
-                         expiresAt,
-                         usedAt
-                  FROM password_reset_token
-                  WHERE token = @Token
-                  LIMIT 1
-                  """
-                : """
-                  SELECT CAST(id AS CHAR) AS id,
-                         CAST(userId AS CHAR) AS userId,
-                         expiresAt,
-                         usedAt
-                  FROM password_reset_token
-                  WHERE token = @Token
-                  LIMIT 1
-                  """,
+            """
+            SELECT id,
+                   userId,
+                   expiresAt,
+                   usedAt
+            FROM password_reset_token
+            WHERE token = @Token
+            LIMIT 1
+            """,
             new { Token = request.Token });
 
         if (resetRow is null)
@@ -313,41 +220,25 @@ internal sealed class AuthService
 
         var newHashedPassword = _passwordHasher.Hash(request.NewPassword);
         await _db.ExecuteAsync(
-            IsSqlite()
-                ? """
-                  UPDATE user
-                  SET password = @Password,
-                      updatedAt = CURRENT_TIMESTAMP
-                  WHERE id = @UserId AND deletedAt IS NULL
-                  """
-                : """
-                  UPDATE user
-                  SET password = @Password,
-                      updatedAt = UTC_TIMESTAMP()
-                  WHERE id = @UserId AND deletedAt IS NULL
-                  """,
+            """
+            UPDATE user
+            SET password = @Password,
+                updatedAt = CURRENT_TIMESTAMP
+            WHERE id = @UserId AND deletedAt IS NULL
+            """,
             new { Password = newHashedPassword, resetRow.UserId });
 
         await _db.ExecuteAsync(
-            IsSqlite()
-                ? "UPDATE password_reset_token SET usedAt = CURRENT_TIMESTAMP WHERE id = @Id"
-                : "UPDATE password_reset_token SET usedAt = UTC_TIMESTAMP() WHERE id = @Id",
+            "UPDATE password_reset_token SET usedAt = CURRENT_TIMESTAMP WHERE id = @Id",
             new { resetRow.Id });
 
         await _db.ExecuteAsync(
-            IsSqlite()
-                ? """
-                  UPDATE refresh_token
-                  SET revokedAt = CURRENT_TIMESTAMP
-                  WHERE userId = @UserId
-                  AND revokedAt IS NULL
-                  """
-                : """
-                  UPDATE refresh_token
-                  SET revokedAt = UTC_TIMESTAMP()
-                  WHERE userId = @UserId
-                  AND revokedAt IS NULL
-                  """,
+            """
+            UPDATE refresh_token
+            SET revokedAt = CURRENT_TIMESTAMP
+            WHERE userId = @UserId
+            AND revokedAt IS NULL
+            """,
             new { resetRow.UserId });
 
         return Results.Ok();
@@ -361,17 +252,11 @@ internal sealed class AuthService
         }
 
         await _db.ExecuteAsync(
-            IsSqlite()
-                ? """
-                  UPDATE refresh_token
-                  SET revokedAt = CURRENT_TIMESTAMP
-                  WHERE userId = @UserId AND revokedAt IS NULL
-                  """
-                : """
-                  UPDATE refresh_token
-                  SET revokedAt = UTC_TIMESTAMP()
-                  WHERE userId = @UserId AND revokedAt IS NULL
-                  """,
+            """
+            UPDATE refresh_token
+            SET revokedAt = CURRENT_TIMESTAMP
+            WHERE userId = @UserId AND revokedAt IS NULL
+            """,
             new { UserId = userId });
 
         return Results.NoContent();
@@ -385,19 +270,12 @@ internal sealed class AuthService
         }
 
         var me = await _db.QuerySingleOrDefaultAsync<MeResponse>(
-            IsSqlite()
-                ? """
-                  SELECT id AS id, username, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone
-                  FROM user
-                  WHERE id = @Id AND deletedAt IS NULL
-                  LIMIT 1
-                  """
-                : """
-                  SELECT CAST(id AS CHAR) AS id, username, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone
-                  FROM user
-                  WHERE id = @Id AND deletedAt IS NULL
-                  LIMIT 1
-                  """,
+            """
+            SELECT id, username, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone
+            FROM user
+            WHERE id = @Id AND deletedAt IS NULL
+            LIMIT 1
+            """,
             new { Id = userId });
 
         return me is not null ? Results.Ok(me) : Results.NotFound();
@@ -441,8 +319,6 @@ internal sealed class AuthService
     private sealed record RefreshTokenRow(string Id, string UserId, string ExpiresAt, string? RevokedAt, string Username, string Email);
     private sealed record PasswordResetTokenRow(string Id, string UserId, string ExpiresAt, string? UsedAt);
 
-    private bool IsSqlite() => _db is SqliteConnection;
-
     private static DateTime ParseUtc(string value)
     {
         if (DateTime.TryParse(value, out var parsed))
@@ -465,4 +341,3 @@ internal sealed class AuthService
         return ParseUtc(value);
     }
 }
-

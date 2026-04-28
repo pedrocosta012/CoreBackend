@@ -21,17 +21,22 @@ internal static class DatabaseInitializer
         if (db is SqliteConnection sqliteConnection)
         {
             await sqliteConnection.OpenAsync();
-            RunSqliteSchema(sqliteConnection);
-            await SeedTestUserAsync(sqliteConnection);
-            return;
         }
 
-        RunMySqlMigrations(connectionString);
+        RunMigrations(db);
         await SeedTestUserAsync(db);
     }
 
-    private static void RunMySqlMigrations(string connectionString)
+    private static void RunMigrations(IDbConnection connection)
     {
+        connection.Execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_versions (
+                script_name TEXT NOT NULL PRIMARY KEY,
+                applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """);
+
         var assembly = Assembly.GetExecutingAssembly();
         var migrationResources = assembly
             .GetManifestResourceNames()
@@ -40,17 +45,6 @@ internal static class DatabaseInitializer
                 name.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-
-        using var connection = new MySqlConnector.MySqlConnection(connectionString);
-        connection.Open();
-
-        connection.Execute(
-            """
-            CREATE TABLE IF NOT EXISTS schema_versions (
-                script_name VARCHAR(255) NOT NULL PRIMARY KEY,
-                applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """);
 
         var applied = connection
             .Query<string>("SELECT script_name FROM schema_versions")
@@ -65,82 +59,15 @@ internal static class DatabaseInitializer
 
             var script = ReadEmbeddedResource(assembly, resourceName);
 
-            using var transaction = connection.BeginTransaction();
             if (!string.IsNullOrWhiteSpace(script))
             {
-                connection.Execute(script, transaction: transaction);
+                connection.Execute(script);
             }
 
             connection.Execute(
-                "INSERT INTO schema_versions (script_name, applied_at) VALUES (@Name, @AppliedAt)",
-                new { Name = resourceName, AppliedAt = DateTime.UtcNow },
-                transaction: transaction);
-
-            transaction.Commit();
+                "INSERT INTO schema_versions (script_name) VALUES (@Name)",
+                new { Name = resourceName });
         }
-    }
-
-    private static void RunSqliteSchema(IDbConnection connection)
-    {
-        connection.Execute(
-            """
-            CREATE TABLE IF NOT EXISTS schema_versions (
-                script_name TEXT NOT NULL PRIMARY KEY,
-                applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-            """);
-
-        connection.Execute(
-            """
-            CREATE TABLE IF NOT EXISTS user (
-                id TEXT NOT NULL PRIMARY KEY,
-                username TEXT NOT NULL UNIQUE,
-                email TEXT UNIQUE,
-                phone TEXT,
-                password TEXT NOT NULL,
-                createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                deletedAt TEXT NULL
-            );
-            """);
-
-        connection.Execute(
-            """
-            CREATE TABLE IF NOT EXISTS refresh_token (
-                id TEXT NOT NULL PRIMARY KEY,
-                userId TEXT NOT NULL,
-                token TEXT NOT NULL UNIQUE,
-                expiresAt TEXT NOT NULL,
-                revokedAt TEXT NULL,
-                createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (userId) REFERENCES user(id)
-            );
-            """);
-
-        connection.Execute(
-            """
-            CREATE TABLE IF NOT EXISTS password_reset_token (
-                id TEXT NOT NULL PRIMARY KEY,
-                userId TEXT NOT NULL,
-                token TEXT NOT NULL UNIQUE,
-                expiresAt TEXT NOT NULL,
-                usedAt TEXT NULL,
-                createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (userId) REFERENCES user(id)
-            );
-            """);
-
-        connection.Execute(
-            """
-            CREATE TABLE IF NOT EXISTS category (
-                id TEXT NOT NULL PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                type TEXT NOT NULL,
-                createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                deletedAt TEXT NULL
-            );
-            """);
     }
 
     private static string ReadEmbeddedResource(Assembly assembly, string resourceName)
@@ -167,7 +94,7 @@ internal static class DatabaseInitializer
 
         var exists = await db.QuerySingleOrDefaultAsync<string>(
             """
-            SELECT CAST(id AS CHAR) AS id
+            SELECT id
             FROM user
             WHERE email = @Email AND deletedAt IS NULL
             LIMIT 1
@@ -197,4 +124,3 @@ internal static class DatabaseInitializer
             });
     }
 }
-
