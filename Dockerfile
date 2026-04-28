@@ -8,8 +8,6 @@ WORKDIR /app/CoreBackend
 
 RUN dotnet restore
 
-EXPOSE 8081
-
 ENV ASPNETCORE_URLS=http://+:8080
 
 ENTRYPOINT ["dotnet", "watch", "run", "--urls", "http://0.0.0.0:8080"]
