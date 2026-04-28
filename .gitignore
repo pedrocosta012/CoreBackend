@@ -485,3 +485,6 @@ $RECYCLE.BIN/
 
 # Database schemas
 *.dbml
+
+# Backup files
+*-bkp.*
