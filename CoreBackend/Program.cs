@@ -12,7 +12,8 @@ builder.Services
     .AddApiDocumentation()
     .AddAuthorizationCoreBackend()
     .AddDatabaseConnection(builder.Configuration)
-    .AddCoreInfrastructure(builder.Configuration);
+    .AddCoreInfrastructure(builder.Configuration)
+    .AddEventBus();
 
 var jwtSecret = builder.Configuration["JWT_SECRET"];
 if (string.IsNullOrWhiteSpace(jwtSecret))

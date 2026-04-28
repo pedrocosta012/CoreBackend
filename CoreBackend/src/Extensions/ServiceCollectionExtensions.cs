@@ -1,7 +1,9 @@
 using System.Data;
+using System.Reflection;
 using CoreBackend.Auth;
 using CoreBackend.Infrastructure.Database;
 using CoreBackend.Infrastructure.Email;
+using CoreBackend.Infrastructure.Events;
 using CoreBackend.Infrastructure.Security;
 using CoreBackend.Users;
 using Microsoft.Data.Sqlite;
@@ -61,6 +63,33 @@ public static class ServiceCollectionExtensions
             options.ApiToken = configuration["RESEND:APITOKEN"] ?? string.Empty;
         });
         services.AddTransient<IResend, ResendClient>();
+
+        return services;
+    }
+
+    public static IServiceCollection AddEventBus(this IServiceCollection services, params Assembly[] assemblies)
+    {
+        services.AddScoped<IEventBus, EventBus>();
+
+        var targetAssemblies = assemblies.Length > 0
+            ? assemblies
+            : [Assembly.GetExecutingAssembly()];
+
+        var handlerInterfaceType = typeof(IEventHandler<>);
+
+        foreach (var assembly in targetAssemblies)
+        {
+            var handlers = assembly.GetTypes()
+                .Where(t => t is { IsAbstract: false, IsInterface: false })
+                .SelectMany(t => t.GetInterfaces()
+                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == handlerInterfaceType)
+                    .Select(i => new { ServiceType = i, ImplementationType = t }));
+
+            foreach (var handler in handlers)
+            {
+                services.AddScoped(handler.ServiceType, handler.ImplementationType);
+            }
+        }
 
         return services;
     }
