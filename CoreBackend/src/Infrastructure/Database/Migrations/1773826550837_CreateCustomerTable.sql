@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS customer (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    document TEXT,
+    email TEXT,
+    phone TEXT,
+    segment TEXT NOT NULL DEFAULT 'new',
+    status TEXT NOT NULL DEFAULT 'active',
+    totalSpent REAL NOT NULL DEFAULT 0,
+    ordersCount INTEGER NOT NULL DEFAULT 0,
+    lastPurchaseDate TEXT,
+    loyaltyPoints INTEGER NOT NULL DEFAULT 0,
+    address TEXT,
+    city TEXT,
+    state TEXT,
+    notes TEXT,
+    tags TEXT,
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deletedAt TEXT
+);
