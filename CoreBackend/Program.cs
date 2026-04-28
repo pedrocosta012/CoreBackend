@@ -52,6 +52,8 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapGet("/health", () => Results.Ok()).ExcludeFromDescription();
+
 app.MapCategoryEndpoints();
 app.MapUserEndpoints();
 app.MapAuthEndpoints();
