@@ -9,6 +9,12 @@ internal static class AuthEndpoints
         app.MapPost("/auth/register", (RegisterRequest request, AuthService authService, CancellationToken cancellationToken) =>
             authService.RegisterAsync(request, cancellationToken));
 
+        app.MapPost("/auth/register/owner", (RegisterOwnerRequest request, AuthService authService, CancellationToken cancellationToken) =>
+            authService.RegisterOwnerAsync(request, cancellationToken));
+
+        app.MapPost("/auth/register/worker", (RegisterWorkerRequest request, AuthService authService, CancellationToken cancellationToken) =>
+            authService.RegisterWorkerAsync(request, cancellationToken));
+
         app.MapPost("/auth/login", (LoginRequest request, AuthService authService, CancellationToken cancellationToken) =>
             authService.LoginAsync(request, cancellationToken));
 

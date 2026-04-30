@@ -1,0 +1,19 @@
+CREATE TABLE IF NOT EXISTS company (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    officeType TEXT NOT NULL DEFAULT 'headquarters',
+    taxId TEXT,
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deletedAt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS company_member (
+    id TEXT NOT NULL PRIMARY KEY,
+    userId TEXT NOT NULL,
+    companyId TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'worker',
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (userId) REFERENCES user(id),
+    FOREIGN KEY (companyId) REFERENCES company(id)
+);

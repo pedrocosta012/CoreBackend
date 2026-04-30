@@ -78,6 +78,111 @@ internal sealed class AuthService
         }
     }
 
+    public async Task<IResult> RegisterOwnerAsync(RegisterOwnerRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.FirstName))
+            return Results.BadRequest(new { error = "First name is required." });
+        if (string.IsNullOrWhiteSpace(request.Email) || !IsValidEmail(request.Email))
+            return Results.BadRequest(new { error = "Valid email is required." });
+        if (string.IsNullOrWhiteSpace(request.Password))
+            return Results.BadRequest(new { error = "Password is required." });
+        if (string.IsNullOrWhiteSpace(request.CompanyName))
+            return Results.BadRequest(new { error = "Company name is required." });
+        if (!string.IsNullOrWhiteSpace(request.Cpf) && !CpfValidator.IsValid(request.Cpf))
+            return Results.BadRequest(new { error = "Invalid CPF." });
+
+        try
+        {
+            var userId = Guid.NewGuid().ToString();
+            var companyId = Guid.NewGuid().ToString();
+            var memberId = Guid.NewGuid().ToString();
+            var username = GenerateUsername();
+            var cpfDigits = ExtractDigits(request.Cpf);
+            var hashedPassword = _passwordHasher.Hash(request.Password);
+
+            await _db.ExecuteAsync(
+                """
+                INSERT INTO user (id, username, firstName, lastName, cpf, email, phone, password)
+                VALUES (@Id, @Username, @FirstName, @LastName, @Cpf, @Email, @Phone, @Password)
+                """,
+                new { Id = userId, Username = username, request.FirstName, LastName = request.LastName ?? "", Cpf = cpfDigits, request.Email, request.Phone, Password = hashedPassword });
+
+            await _db.ExecuteAsync(
+                """
+                INSERT INTO company (id, name, officeType, taxId)
+                VALUES (@Id, @Name, @OfficeType, @TaxId)
+                """,
+                new { Id = companyId, Name = request.CompanyName, OfficeType = request.OfficeType ?? "headquarters", TaxId = request.TaxId ?? "" });
+
+            await _db.ExecuteAsync(
+                """
+                INSERT INTO company_member (id, userId, companyId, role)
+                VALUES (@Id, @UserId, @CompanyId, 'owner')
+                """,
+                new { Id = memberId, UserId = userId, CompanyId = companyId });
+
+            var response = await CreateTokensAsync(new AuthenticatedUser(userId, request.FirstName, request.LastName ?? "", request.Email));
+            return Results.Created($"/users/{userId}", response);
+        }
+        catch (SqliteException err) when (
+            err.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Conflict(new { error = "Email or CPF already exists." });
+        }
+    }
+
+    public async Task<IResult> RegisterWorkerAsync(RegisterWorkerRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.FirstName))
+            return Results.BadRequest(new { error = "First name is required." });
+        if (string.IsNullOrWhiteSpace(request.Email) || !IsValidEmail(request.Email))
+            return Results.BadRequest(new { error = "Valid email is required." });
+        if (string.IsNullOrWhiteSpace(request.Password))
+            return Results.BadRequest(new { error = "Password is required." });
+        if (string.IsNullOrWhiteSpace(request.CompanyId))
+            return Results.BadRequest(new { error = "Company is required." });
+        if (!string.IsNullOrWhiteSpace(request.Cpf) && !CpfValidator.IsValid(request.Cpf))
+            return Results.BadRequest(new { error = "Invalid CPF." });
+
+        var companyExists = await _db.ExecuteScalarAsync<int>(
+            "SELECT COUNT(1) FROM company WHERE id = @Id AND deletedAt IS NULL",
+            new { Id = request.CompanyId });
+
+        if (companyExists == 0)
+            return Results.BadRequest(new { error = "Company not found." });
+
+        try
+        {
+            var userId = Guid.NewGuid().ToString();
+            var memberId = Guid.NewGuid().ToString();
+            var username = GenerateUsername();
+            var cpfDigits = ExtractDigits(request.Cpf);
+            var hashedPassword = _passwordHasher.Hash(request.Password);
+
+            await _db.ExecuteAsync(
+                """
+                INSERT INTO user (id, username, firstName, lastName, cpf, email, phone, password)
+                VALUES (@Id, @Username, @FirstName, @LastName, @Cpf, @Email, @Phone, @Password)
+                """,
+                new { Id = userId, Username = username, request.FirstName, LastName = request.LastName ?? "", Cpf = cpfDigits, request.Email, request.Phone, Password = hashedPassword });
+
+            await _db.ExecuteAsync(
+                """
+                INSERT INTO company_member (id, userId, companyId, role)
+                VALUES (@Id, @UserId, @CompanyId, 'worker')
+                """,
+                new { Id = memberId, UserId = userId, CompanyId = request.CompanyId });
+
+            var response = await CreateTokensAsync(new AuthenticatedUser(userId, request.FirstName, request.LastName ?? "", request.Email));
+            return Results.Created($"/users/{userId}", response);
+        }
+        catch (SqliteException err) when (
+            err.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Conflict(new { error = "Email or CPF already exists." });
+        }
+    }
+
     public async Task<IResult> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Identifier) || string.IsNullOrWhiteSpace(request.Password))

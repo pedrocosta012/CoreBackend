@@ -1,6 +1,7 @@
 using System.Text;
 using CoreBackend.Auth;
 using CoreBackend.Categories;
+using CoreBackend.Companies;
 using CoreBackend.Customers;
 using CoreBackend.Extensions;
 using CoreBackend.Infrastructure.Database;
@@ -57,6 +58,7 @@ app.UseAuthorization();
 app.MapGet("/health", () => Results.Ok()).ExcludeFromDescription();
 
 app.MapCategoryEndpoints();
+app.MapCompanyEndpoints();
 app.MapCustomerEndpoints();
 app.MapUserEndpoints();
 app.MapAuthEndpoints();
