@@ -31,9 +31,11 @@ internal sealed class JwtTokenService : ITokenService
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id),
-            new(ClaimTypes.Name, user.Username),
+            new(ClaimTypes.Name, $"{user.FirstName} {user.LastName}".Trim()),
             new(JwtRegisteredClaimNames.Sub, user.Id),
-            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(JwtRegisteredClaimNames.GivenName, user.FirstName),
+            new(JwtRegisteredClaimNames.FamilyName, user.LastName)
         };
 
         if (!string.IsNullOrWhiteSpace(user.Email))

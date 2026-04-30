@@ -2,6 +2,7 @@ using System.Data;
 using System.Net.Mail;
 using CoreBackend.Infrastructure.Email;
 using CoreBackend.Infrastructure.Security;
+using CoreBackend.Infrastructure.Validation;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
@@ -35,46 +36,45 @@ internal sealed class AuthService
 
     public async Task<IResult> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Username))
-        {
-            return Results.BadRequest(new { error = "Username is required." });
-        }
-
+        if (string.IsNullOrWhiteSpace(request.FirstName))
+            return Results.BadRequest(new { error = "First name is required." });
         if (string.IsNullOrWhiteSpace(request.Email) || !IsValidEmail(request.Email))
-        {
             return Results.BadRequest(new { error = "Valid email is required." });
-        }
-
         if (string.IsNullOrWhiteSpace(request.Password))
-        {
             return Results.BadRequest(new { error = "Password is required." });
-        }
+        if (!string.IsNullOrWhiteSpace(request.Cpf) && !CpfValidator.IsValid(request.Cpf))
+            return Results.BadRequest(new { error = "Invalid CPF." });
 
         try
         {
             var userId = Guid.NewGuid().ToString();
+            var username = GenerateUsername();
+            var cpfDigits = ExtractDigits(request.Cpf);
             var hashedPassword = _passwordHasher.Hash(request.Password);
             await _db.ExecuteAsync(
                 """
-                INSERT INTO user (id, username, email, phone, password)
-                VALUES (@Id, @Username, @Email, @Phone, @Password)
+                INSERT INTO user (id, username, firstName, lastName, cpf, email, phone, password)
+                VALUES (@Id, @Username, @FirstName, @LastName, @Cpf, @Email, @Phone, @Password)
                 """,
                 new
                 {
                     Id = userId,
-                    request.Username,
+                    Username = username,
+                    request.FirstName,
+                    LastName = request.LastName ?? "",
+                    Cpf = cpfDigits,
                     request.Email,
                     request.Phone,
                     Password = hashedPassword
                 });
 
-            var response = await CreateTokensAsync(new AuthenticatedUser(userId, request.Username, request.Email));
+            var response = await CreateTokensAsync(new AuthenticatedUser(userId, request.FirstName, request.LastName ?? "", request.Email));
             return Results.Created($"/users/{userId}", response);
         }
         catch (SqliteException err) when (
             err.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase))
         {
-            return Results.Conflict(new { error = "Email or username already exists." });
+            return Results.Conflict(new { error = "Email or CPF already exists." });
         }
     }
 
@@ -82,15 +82,16 @@ internal sealed class AuthService
     {
         if (string.IsNullOrWhiteSpace(request.Identifier) || string.IsNullOrWhiteSpace(request.Password))
         {
-            return Results.BadRequest(new { error = "Identifier and password are required." });
+            return Results.BadRequest(new { error = "Email and password are required." });
         }
 
         var user = await _db.QuerySingleOrDefaultAsync<LoginUserRow>(
             """
-            SELECT id, username, COALESCE(email, '') AS email, password
+            SELECT id, COALESCE(firstName, '') AS firstName, COALESCE(lastName, '') AS lastName,
+                   COALESCE(email, '') AS email, password
             FROM user
             WHERE deletedAt IS NULL
-            AND (email = @Identifier OR username = @Identifier)
+            AND email = @Identifier
             LIMIT 1
             """,
             new { request.Identifier });
@@ -100,7 +101,7 @@ internal sealed class AuthService
             return Results.Unauthorized();
         }
 
-        var response = await CreateTokensAsync(new AuthenticatedUser(user.Id, user.Username, user.Email));
+        var response = await CreateTokensAsync(new AuthenticatedUser(user.Id, user.FirstName, user.LastName, user.Email));
         return Results.Ok(response);
     }
 
@@ -117,7 +118,8 @@ internal sealed class AuthService
                    rt.userId,
                    rt.expiresAt,
                    rt.revokedAt,
-                   u.username,
+                   COALESCE(u.firstName, '') AS firstName,
+                   COALESCE(u.lastName, '') AS lastName,
                    COALESCE(u.email, '') AS email
             FROM refresh_token rt
             INNER JOIN user u ON u.id = rt.userId
@@ -143,7 +145,7 @@ internal sealed class AuthService
             "UPDATE refresh_token SET revokedAt = CURRENT_TIMESTAMP WHERE id = @Id",
             new { tokenRow.Id });
 
-        var response = await CreateTokensAsync(new AuthenticatedUser(tokenRow.UserId, tokenRow.Username, tokenRow.Email));
+        var response = await CreateTokensAsync(new AuthenticatedUser(tokenRow.UserId, tokenRow.FirstName, tokenRow.LastName, tokenRow.Email));
         return Results.Ok(response);
     }
 
@@ -156,7 +158,8 @@ internal sealed class AuthService
 
         var user = await _db.QuerySingleOrDefaultAsync<LoginUserRow>(
             """
-            SELECT id, username, COALESCE(email, '') AS email, password
+            SELECT id, COALESCE(firstName, '') AS firstName, COALESCE(lastName, '') AS lastName,
+                   COALESCE(email, '') AS email, password
             FROM user
             WHERE email = @Email AND deletedAt IS NULL
             LIMIT 1
@@ -271,7 +274,8 @@ internal sealed class AuthService
 
         var me = await _db.QuerySingleOrDefaultAsync<MeResponse>(
             """
-            SELECT id, username, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone
+            SELECT id, COALESCE(firstName, '') AS firstName, COALESCE(lastName, '') AS lastName,
+                   COALESCE(cpf, '') AS cpf, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone
             FROM user
             WHERE id = @Id AND deletedAt IS NULL
             LIMIT 1
@@ -302,6 +306,11 @@ internal sealed class AuthService
         return new TokensResponse(authToken, refreshToken);
     }
 
+    private static string GenerateUsername() => $"u-{Guid.NewGuid():N}";
+
+    private static string ExtractDigits(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "" : new string(value.Where(char.IsDigit).ToArray());
+
     private static bool IsValidEmail(string email)
     {
         try
@@ -315,8 +324,8 @@ internal sealed class AuthService
         }
     }
 
-    private sealed record LoginUserRow(string Id, string Username, string Email, string Password);
-    private sealed record RefreshTokenRow(string Id, string UserId, string ExpiresAt, string? RevokedAt, string Username, string Email);
+    private sealed record LoginUserRow(string Id, string FirstName, string LastName, string Email, string Password);
+    private sealed record RefreshTokenRow(string Id, string UserId, string ExpiresAt, string? RevokedAt, string FirstName, string LastName, string Email);
     private sealed record PasswordResetTokenRow(string Id, string UserId, string ExpiresAt, string? UsedAt);
 
     private static DateTime ParseUtc(string value)

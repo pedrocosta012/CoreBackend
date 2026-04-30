@@ -2,6 +2,7 @@ using System.Data;
 using System.Net.Mail;
 using CoreBackend.Exceptions;
 using CoreBackend.Infrastructure.Security;
+using CoreBackend.Infrastructure.Validation;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -15,14 +16,16 @@ internal static class UserEndpoints
         {
             FieldsContentException error = new();
 
-            if (string.IsNullOrWhiteSpace(request.Username))
-                error.AddError("Username", "Username is required.");
+            if (string.IsNullOrWhiteSpace(request.FirstName))
+                error.AddError("FirstName", "First name is required.");
             if (string.IsNullOrWhiteSpace(request.Email))
                 error.AddError("Email", "Email is required.");
             if (!IsValidEmail(request.Email))
                 error.AddError("Email", "Valid email is required.");
             if (string.IsNullOrWhiteSpace(request.Password))
                 error.AddError("Password", "Password is required.");
+            if (!string.IsNullOrWhiteSpace(request.Cpf) && !CpfValidator.IsValid(request.Cpf))
+                error.AddError("Cpf", "Invalid CPF.");
 
             if (error.HasErrors())
             {
@@ -32,27 +35,32 @@ internal static class UserEndpoints
             try
             {
                 var id = Guid.NewGuid().ToString();
+                var username = $"u-{Guid.NewGuid():N}";
+                var cpfDigits = ExtractDigits(request.Cpf);
                 var hashedPassword = hasher.Hash(request.Password);
                 await db.ExecuteAsync(
                     """
-                    INSERT INTO user (id, username, email, phone, password)
-                    VALUES (@Id, @Username, @Email, @Phone, @Password)
+                    INSERT INTO user (id, username, firstName, lastName, cpf, email, phone, password)
+                    VALUES (@Id, @Username, @FirstName, @LastName, @Cpf, @Email, @Phone, @Password)
                     """,
                     new
                     {
                         Id = id,
-                        request.Username,
+                        Username = username,
+                        request.FirstName,
+                        LastName = request.LastName ?? "",
+                        Cpf = cpfDigits,
                         request.Email,
                         request.Phone,
                         Password = hashedPassword
                     });
 
-                return Results.Created($"/users/{id}", new { id, request.Username, request.Email, request.Phone });
+                return Results.Created($"/users/{id}", new { id, request.FirstName, request.LastName, Cpf = cpfDigits, request.Email, request.Phone });
             }
             catch (SqliteException err) when (
                 err.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.Conflict(new { error = "Email or username already exists." });
+                return Results.Conflict(new { error = "Email or CPF already exists." });
             }
         });
 
@@ -60,7 +68,8 @@ internal static class UserEndpoints
         {
             var users = await db.QueryAsync<UserRow>(
                 """
-                SELECT id, username, email, COALESCE(phone, '') AS phone
+                SELECT id, COALESCE(firstName, '') AS firstName, COALESCE(lastName, '') AS lastName,
+                       COALESCE(cpf, '') AS cpf, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone
                 FROM user
                 WHERE deletedAt IS NULL
                 ORDER BY createdAt DESC
@@ -72,7 +81,8 @@ internal static class UserEndpoints
         {
             var user = await db.QuerySingleOrDefaultAsync<UserRow>(
                 """
-                SELECT id, username, email, COALESCE(phone, '') AS phone
+                SELECT id, COALESCE(firstName, '') AS firstName, COALESCE(lastName, '') AS lastName,
+                       COALESCE(cpf, '') AS cpf, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone
                 FROM user
                 WHERE id = @Id AND deletedAt IS NULL
                 """,
@@ -83,9 +93,9 @@ internal static class UserEndpoints
 
         app.MapPut("/users/{id}", async (string id, UpdateUserRequest request, IDbConnection db) =>
         {
-            if (string.IsNullOrWhiteSpace(request.Username))
+            if (string.IsNullOrWhiteSpace(request.FirstName))
             {
-                return Results.BadRequest(new { error = "Username is required." });
+                return Results.BadRequest(new { error = "First name is required." });
             }
 
             if (string.IsNullOrWhiteSpace(request.Email) || !IsValidEmail(request.Email))
@@ -93,23 +103,33 @@ internal static class UserEndpoints
                 return Results.BadRequest(new { error = "Valid email is required." });
             }
 
+            if (!string.IsNullOrWhiteSpace(request.Cpf) && !CpfValidator.IsValid(request.Cpf))
+            {
+                return Results.BadRequest(new { error = "Invalid CPF." });
+            }
+
+            var cpfDigits = ExtractDigits(request.Cpf);
+
             var rows = await db.ExecuteAsync(
                 """
                 UPDATE user
-                SET username = @Username,
+                SET firstName = @FirstName,
+                    lastName = @LastName,
+                    cpf = @Cpf,
                     email = @Email,
-                    phone = @Phone
+                    phone = @Phone,
+                    updatedAt = CURRENT_TIMESTAMP
                 WHERE id = @Id
                 AND deletedAt IS NULL
                 """,
-                new { Id = id, request.Username, request.Email, request.Phone });
+                new { Id = id, request.FirstName, LastName = request.LastName ?? "", Cpf = cpfDigits, request.Email, request.Phone });
 
             if (rows == 0)
             {
                 return Results.NotFound();
             }
 
-            return Results.Ok(new { id, request.Username, request.Email, request.Phone });
+            return Results.Ok(new { id, request.FirstName, request.LastName, Cpf = cpfDigits, request.Email, request.Phone });
         });
 
         app.MapDelete("/users/{id}", async (string id, IDbConnection db) =>
@@ -125,6 +145,9 @@ internal static class UserEndpoints
             return rows > 0 ? Results.NoContent() : Results.NotFound();
         });
     }
+
+    private static string ExtractDigits(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "" : new string(value.Where(char.IsDigit).ToArray());
 
     private static bool IsValidEmail(string email)
     {

@@ -26,8 +26,11 @@ public sealed class AuthEndpointsTests : IDisposable
     [Fact]
     public async Task Register_ShouldReturn201AndTokens_WhenPayloadIsValid()
     {
-        var request = new RegisterRequest(
-            Username: $"register-{Guid.NewGuid():N}",
+        var cpf = TestCpf.Generate();
+        var request = new AuthRegisterRequest(
+            FirstName: "João",
+            LastName: "Silva",
+            Cpf: cpf,
             Email: $"register-{Guid.NewGuid():N}@example.com",
             Phone: "11999990000",
             Password: "Strong@Pass1");
@@ -40,10 +43,19 @@ public sealed class AuthEndpointsTests : IDisposable
         using var document = JsonDocument.Parse(body);
         var root = document.RootElement;
 
-        var authToken = root.GetProperty("authToken").GetString() ?? string.Empty;
-        var refreshToken = root.GetProperty("refreshToken").GetString() ?? string.Empty;
-        Assert.False(string.IsNullOrWhiteSpace(authToken));
-        Assert.False(string.IsNullOrWhiteSpace(refreshToken));
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("authToken").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("refreshToken").GetString()));
+    }
+
+    [Fact]
+    public async Task Register_ShouldReturn400_WhenCpfIsInvalid()
+    {
+        var request = new AuthRegisterRequest("João", "Silva", "11111111111",
+            $"badcpf-{Guid.NewGuid():N}@example.com", "11999990000", "Strong@Pass1");
+
+        var response = await _httpClient.PostAsJsonAsync("/auth/register", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -67,20 +79,27 @@ public sealed class AuthEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Me_ShouldReturn200_WhenAuthTokenIsValid()
+    public async Task Me_ShouldReturn200WithUserData_WhenAuthTokenIsValid()
     {
-        var loginResponse = await _httpClient.PostAsJsonAsync(
-            "/auth/login",
-            new LoginRequest(TestUsers.ValidLoginIdentifier, TestUsers.ValidLoginPassword));
-        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        var cpf = TestCpf.Generate();
+        var registerRequest = new AuthRegisterRequest("Maria", "Santos", cpf,
+            $"me-{Guid.NewGuid():N}@example.com", "11999990000", "Strong@Pass1");
+        var registerResponse = await _httpClient.PostAsJsonAsync("/auth/register", registerRequest);
+        Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
 
-        var loginBody = await loginResponse.Content.ReadAsStringAsync();
-        using var loginDocument = JsonDocument.Parse(loginBody);
-        var authToken = loginDocument.RootElement.GetProperty("authToken").GetString() ?? string.Empty;
+        var registerBody = await registerResponse.Content.ReadAsStringAsync();
+        using var registerDoc = JsonDocument.Parse(registerBody);
+        var authToken = registerDoc.RootElement.GetProperty("authToken").GetString() ?? string.Empty;
 
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
         var meResponse = await _httpClient.GetAsync("/me");
         Assert.Equal(HttpStatusCode.OK, meResponse.StatusCode);
+
+        var meBody = await meResponse.Content.ReadAsStringAsync();
+        using var meDoc = JsonDocument.Parse(meBody);
+        Assert.Equal("Maria", meDoc.RootElement.GetProperty("firstName").GetString());
+        Assert.Equal("Santos", meDoc.RootElement.GetProperty("lastName").GetString());
+        Assert.Equal(cpf, meDoc.RootElement.GetProperty("cpf").GetString());
     }
 
     [Fact]
@@ -125,8 +144,7 @@ public sealed class AuthEndpointsTests : IDisposable
     }
 }
 
-internal sealed record RegisterRequest(string Username, string Email, string Phone, string Password);
+internal sealed record AuthRegisterRequest(string FirstName, string LastName, string Cpf, string Email, string Phone, string Password);
 internal sealed record RefreshRequest(string RefreshToken);
 internal sealed record ForgotPasswordRequest(string Email);
 internal sealed record ResetPasswordRequest(string Token, string NewPassword);
-

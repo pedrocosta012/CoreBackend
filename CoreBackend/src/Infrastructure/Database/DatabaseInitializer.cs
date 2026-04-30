@@ -111,13 +111,16 @@ internal static class DatabaseInitializer
 
         await db.ExecuteAsync(
             """
-            INSERT INTO user (id, username, email, phone, password)
-            VALUES (@Id, @Username, @Email, @Phone, @Password)
+            INSERT INTO user (id, username, firstName, lastName, cpf, email, phone, password)
+            VALUES (@Id, @Username, @FirstName, @LastName, @Cpf, @Email, @Phone, @Password)
             """,
             new
             {
                 Id = id,
-                Username = "admin",
+                Username = $"u-{Guid.NewGuid():N}",
+                FirstName = "Admin",
+                LastName = "Valendo",
+                Cpf = "",
                 Email = seedEmail,
                 Phone = string.Empty,
                 Password = hashedPassword
