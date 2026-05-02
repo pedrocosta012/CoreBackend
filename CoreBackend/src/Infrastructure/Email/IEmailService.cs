@@ -1,6 +1,6 @@
 namespace CoreBackend.Infrastructure.Email;
 
-internal interface IEmailService
+public interface IEmailService
 {
     Task SendPasswordResetAsync(string toEmail, string resetLink, CancellationToken cancellationToken);
 }

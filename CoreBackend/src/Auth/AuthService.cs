@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace CoreBackend.Auth;
 
-internal sealed class AuthService
+public sealed class AuthService
 {
     private readonly IDbConnection _db;
     private readonly IPasswordHasher _passwordHasher;
@@ -32,50 +32,6 @@ internal sealed class AuthService
         _emailService = emailService;
         _jwtSettings = jwtSettings.Value;
         _resendSettings = resendSettings.Value;
-    }
-
-    public async Task<IResult> RegisterAsync(RegisterEmployeeRequest request, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(request.FirstName))
-            return Results.BadRequest(new { error = "First name is required." });
-        if (string.IsNullOrWhiteSpace(request.Email) || !IsValidEmail(request.Email))
-            return Results.BadRequest(new { error = "Valid email is required." });
-        if (string.IsNullOrWhiteSpace(request.Password))
-            return Results.BadRequest(new { error = "Password is required." });
-        if (!string.IsNullOrWhiteSpace(request.Cpf) && !CpfValidator.IsValid(request.Cpf))
-            return Results.BadRequest(new { error = "Invalid CPF." });
-
-        try
-        {
-            var userId = Guid.NewGuid().ToString();
-            var username = GenerateUsername();
-            var cpfDigits = ExtractDigits(request.Cpf);
-            var hashedPassword = _passwordHasher.Hash(request.Password);
-            await _db.ExecuteAsync(
-                """
-                INSERT INTO user (id, username, firstName, lastName, cpf, email, phone, password)
-                VALUES (@Id, @Username, @FirstName, @LastName, @Cpf, @Email, @Phone, @Password)
-                """,
-                new
-                {
-                    Id = userId,
-                    Username = username,
-                    request.FirstName,
-                    LastName = request.LastName ?? "",
-                    Cpf = cpfDigits,
-                    request.Email,
-                    request.Phone,
-                    Password = hashedPassword
-                });
-
-            var response = await CreateTokensAsync(new AuthenticatedUser(userId, request.FirstName, request.LastName ?? "", request.Email));
-            return Results.Created($"/users/{userId}", response);
-        }
-        catch (SqliteException err) when (
-            err.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase))
-        {
-            return Results.Conflict(new { error = "Email or CPF already exists." });
-        }
     }
 
     public async Task<IResult> RegisterOwnerAsync(RegisterOwnerRequest request, CancellationToken cancellationToken)

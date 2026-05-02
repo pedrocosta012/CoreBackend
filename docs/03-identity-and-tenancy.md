@@ -53,7 +53,8 @@ Sem este contexto nenhum outro funciona. Ele estabelece isolamento multi-tenant,
 | CRUD | CompanyConfig | Relacao 1:1 com company |
 
 ### Endpoints / Casos de uso
-- `POST /auth/register` — criar usuario.
+- `POST /auth/register/owner` — criar usuario, empresa e vinculo owner.
+- `POST /auth/register/worker` — criar usuario com vinculo worker a empresa existente.
 - `POST /auth/login` — autenticar e retornar token.
 - `POST /auth/refresh` — renovar token.
 - `POST /auth/forgot-password` — iniciar fluxo de recuperacao.

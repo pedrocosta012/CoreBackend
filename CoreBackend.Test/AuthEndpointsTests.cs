@@ -24,18 +24,18 @@ public sealed class AuthEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Register_ShouldReturn201AndTokens_WhenPayloadIsValid()
+    public async Task RegisterOwner_ShouldReturn201AndTokens_WhenPayloadIsValid()
     {
         var cpf = TestCpf.Generate();
-        var request = new AuthRegisterRequest(
-            FirstName: "João",
-            LastName: "Silva",
-            Cpf: cpf,
-            Email: $"register-{Guid.NewGuid():N}@example.com",
-            Phone: "11999990000",
-            Password: "Strong@Pass1");
-
-        var response = await _httpClient.PostAsJsonAsync("/auth/register", request);
+        var response = await _httpClient.PostAsJsonAsync("/auth/register/owner",
+            new AuthOwnerRegisterPayload(
+                "João", "Silva", cpf,
+                $"register-{Guid.NewGuid():N}@example.com",
+                "11999990000",
+                "Strong@Pass1",
+                $"Company-{Guid.NewGuid():N}",
+                "headquarters",
+                ""));
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
@@ -48,12 +48,12 @@ public sealed class AuthEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Register_ShouldReturn400_WhenCpfIsInvalid()
+    public async Task RegisterOwner_ShouldReturn400_WhenCpfIsInvalid()
     {
-        var request = new AuthRegisterRequest("João", "Silva", "11111111111",
-            $"badcpf-{Guid.NewGuid():N}@example.com", "11999990000", "Strong@Pass1");
-
-        var response = await _httpClient.PostAsJsonAsync("/auth/register", request);
+        var response = await _httpClient.PostAsJsonAsync("/auth/register/owner",
+            new AuthOwnerRegisterPayload("João", "Silva", "11111111111",
+                $"badcpf-{Guid.NewGuid():N}@example.com", "11999990000", "Strong@Pass1",
+                "Company", "headquarters", ""));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -82,9 +82,10 @@ public sealed class AuthEndpointsTests : IDisposable
     public async Task Me_ShouldReturn200WithUserData_WhenAuthTokenIsValid()
     {
         var cpf = TestCpf.Generate();
-        var registerRequest = new AuthRegisterRequest("Maria", "Santos", cpf,
-            $"me-{Guid.NewGuid():N}@example.com", "11999990000", "Strong@Pass1");
-        var registerResponse = await _httpClient.PostAsJsonAsync("/auth/register", registerRequest);
+        var registerResponse = await _httpClient.PostAsJsonAsync("/auth/register/owner",
+            new AuthOwnerRegisterPayload("Maria", "Santos", cpf,
+                $"me-{Guid.NewGuid():N}@example.com", "11999990000", "Strong@Pass1",
+                $"Company-{Guid.NewGuid():N}", "headquarters", ""));
         Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
 
         var registerBody = await registerResponse.Content.ReadAsStringAsync();
@@ -144,7 +145,8 @@ public sealed class AuthEndpointsTests : IDisposable
     }
 }
 
-internal sealed record AuthRegisterRequest(string FirstName, string LastName, string Cpf, string Email, string Phone, string Password);
+internal sealed record AuthOwnerRegisterPayload(string FirstName, string LastName, string Cpf, string Email, string Phone,
+    string Password, string CompanyName, string OfficeType, string? TaxId);
 internal sealed record RefreshRequest(string RefreshToken);
 internal sealed record ForgotPasswordRequest(string Email);
 internal sealed record ResetPasswordRequest(string Token, string NewPassword);

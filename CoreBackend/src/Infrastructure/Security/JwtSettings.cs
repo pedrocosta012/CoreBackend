@@ -1,6 +1,6 @@
 namespace CoreBackend.Infrastructure.Security;
 
-internal sealed class JwtSettings
+public sealed class JwtSettings
 {
     public string Issuer { get; init; } = "CoreBackend";
     public string Audience { get; init; } = "CoreBackend";

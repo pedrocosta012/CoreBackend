@@ -1,4 +1,4 @@
 namespace CoreBackend.Categories;
 
-internal sealed record CategoryRequest(string Name, string Type);
+public sealed record CategoryRequest(string Name, string Type, string? CompanyId = null);
 

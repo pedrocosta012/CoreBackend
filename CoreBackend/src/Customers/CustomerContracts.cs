@@ -1,6 +1,6 @@
 namespace CoreBackend.Customers;
 
-internal sealed record CreateCustomerRequest(
+public sealed record CreateCustomerRequest(
     string Name,
     string? Document,
     string? Email,
@@ -17,7 +17,7 @@ internal sealed record CreateCustomerRequest(
     string? Notes,
     string[]? Tags);
 
-internal sealed record UpdateCustomerRequest(
+public sealed record UpdateCustomerRequest(
     string? Name,
     string? Document,
     string? Email,

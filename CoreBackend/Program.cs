@@ -1,14 +1,11 @@
 using System.Text;
-using CoreBackend.Auth;
-using CoreBackend.Categories;
-using CoreBackend.Companies;
-using CoreBackend.Customers;
 using CoreBackend.Extensions;
 using CoreBackend.Infrastructure.Database;
-using CoreBackend.Users;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
 
 builder.Services
     .AddApiDocumentation()
@@ -55,13 +52,7 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/health", () => Results.Ok()).ExcludeFromDescription();
-
-app.MapCategoryEndpoints();
-app.MapCompanyEndpoints();
-app.MapCustomerEndpoints();
-app.MapUserEndpoints();
-app.MapAuthEndpoints();
+app.MapControllers();
 
 app.Run();
 

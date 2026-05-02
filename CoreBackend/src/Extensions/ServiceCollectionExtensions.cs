@@ -1,14 +1,10 @@
 using System.Data;
 using System.Reflection;
 using CoreBackend.Auth;
-using CoreBackend.Infrastructure.Database;
 using CoreBackend.Infrastructure.Email;
 using CoreBackend.Infrastructure.Events;
 using CoreBackend.Infrastructure.Security;
-using CoreBackend.Users;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Resend;
 
 namespace CoreBackend.Extensions;
