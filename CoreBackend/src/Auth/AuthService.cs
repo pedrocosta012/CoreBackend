@@ -34,7 +34,7 @@ internal sealed class AuthService
         _resendSettings = resendSettings.Value;
     }
 
-    public async Task<IResult> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
+    public async Task<IResult> RegisterAsync(RegisterEmployeeRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.FirstName))
             return Results.BadRequest(new { error = "First name is required." });

@@ -27,7 +27,7 @@ internal sealed class ResendEmailService : IEmailService
         var apiToken = _configuration["RESEND:APITOKEN"] ?? string.Empty;
         if (string.IsNullOrWhiteSpace(apiToken))
         {
-            _logger.LogWarning("RESEND__APITOKEN nao definido. Email de reset nao enviado para {Email}.", toEmail);
+            _logger.LogWarning("RESEND_APITOKEN nao definido. Email de reset nao enviado para {Email}.", toEmail);
             return;
         }
 

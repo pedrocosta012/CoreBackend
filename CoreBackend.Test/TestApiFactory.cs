@@ -23,7 +23,6 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
 
         const string jwtSecret = "TestOnlySecretKey_ForJwtTokenGeneration_AtLeast32Bytes!!";
         Environment.SetEnvironmentVariable("JWT_SECRET", jwtSecret);
-        Environment.SetEnvironmentVariable("JWT__SECRET", jwtSecret);
         Environment.SetEnvironmentVariable("TEST_LOGIN_EMAIL", TestUsers.ValidLoginIdentifier);
         Environment.SetEnvironmentVariable("TEST_LOGIN_PASSWORD", TestUsers.ValidLoginPassword);
     }

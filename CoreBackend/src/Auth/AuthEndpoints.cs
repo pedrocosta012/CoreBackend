@@ -6,7 +6,7 @@ internal static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/auth/register", (RegisterRequest request, AuthService authService, CancellationToken cancellationToken) =>
+        app.MapPost("/auth/register", (RegisterEmployeeRequest request, AuthService authService, CancellationToken cancellationToken) =>
             authService.RegisterAsync(request, cancellationToken));
 
         app.MapPost("/auth/register/owner", (RegisterOwnerRequest request, AuthService authService, CancellationToken cancellationToken) =>
