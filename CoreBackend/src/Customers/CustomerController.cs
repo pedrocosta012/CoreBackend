@@ -42,27 +42,27 @@ public sealed class CustomerController : ControllerBase
             {
                 Id = id,
                 request.Name,
-                Document = request.Document ?? "",
-                Email = request.Email ?? "",
-                Phone = request.Phone ?? "",
+                Document = request.Document,
+                Email = request.Email,
+                Phone = request.Phone,
                 Segment = request.Segment ?? "new",
                 Status = request.Status ?? "active",
-                TotalSpent = request.TotalSpent ?? 0.0,
-                OrdersCount = request.OrdersCount ?? 0,
-                LastPurchaseDate = request.LastPurchaseDate ?? "",
-                LoyaltyPoints = request.LoyaltyPoints ?? 0,
-                Address = request.Address ?? "",
-                City = request.City ?? "",
-                State = request.State ?? "",
-                Notes = request.Notes ?? "",
+                TotalSpent = request.TotalSpent,
+                OrdersCount = request.OrdersCount,
+                LastPurchaseDate = request.LastPurchaseDate,
+                LoyaltyPoints = request.LoyaltyPoints,
+                Address = request.Address,
+                City = request.City,
+                State = request.State,
+                Notes = request.Notes,
                 Tags = tagsJson
             });
 
-        return Results.Created($"/customers/{id}", ToResponse(id, request.Name, request.Document ?? "", request.Email ?? "",
-            request.Phone ?? "", request.Segment ?? "new", request.Status ?? "active",
-            request.TotalSpent ?? 0, request.OrdersCount ?? 0, request.LastPurchaseDate ?? "",
-            request.LoyaltyPoints ?? 0, request.Address ?? "", request.City ?? "", request.State ?? "",
-            request.Notes ?? "", tagsJson, ""));
+        return Results.Created($"/customers/{id}", ToResponse(id, request.Name, request.Document, request.Email,
+            request.Phone, request.Segment ?? "new", request.Status ?? "active",
+            request.TotalSpent, request.OrdersCount, request.LastPurchaseDate,
+            request.LoyaltyPoints, request.Address, request.City, request.State,
+            request.Notes, tagsJson, ""));
     }
 
     [HttpGet]
